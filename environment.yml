@@ -1,0 +1,29 @@
+# conda env create -f environment.yml
+# conda activate histology-omics-fusion
+#
+# The pip block installs the CUDA 12.6 PyTorch build. Swap the index URL for
+# the CUDA version your driver supports, or drop it for a CPU-only install
+# (everything runs on CPU, slowly).
+
+name: histology-omics-fusion
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.11
+  - pip
+  - numpy=2.4.*
+  - pandas=3.0.*
+  - scipy=1.17.*
+  - scikit-learn=1.8.*
+  - h5py=3.16.*
+  - pillow=12.1.*
+  - matplotlib=3.10.*
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu126
+      - torch==2.7.1
+      - torchvision==0.22.1
+      - tifffile==2026.3.3
+      - imagecodecs
+      - umap-learn==0.5.12

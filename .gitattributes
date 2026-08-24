@@ -1,0 +1,20 @@
+# Shell and Slurm scripts must keep LF endings. Committed with CRLF from a
+# Windows checkout they arrive on the cluster with a trailing carriage return
+# on the shebang and fail with "bad interpreter: /bin/bash^M".
+*.sh   text eol=lf
+*.sbatch text eol=lf
+
+*.py   text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf
+*.css  text eol=lf
+*.js   text eol=lf
+
+*.png  binary
+*.jpg  binary
+*.npy  binary
+*.npz  binary
+*.pt   binary
+*.h5   binary
+*.tif  binary

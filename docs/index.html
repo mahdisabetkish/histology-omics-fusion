@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multimodal spatial transcriptomics — cortical layers from expression and histology</title>
+<meta name="description" content="Pairing Visium gene expression with H&amp;E histology to predict cortical layers in human prefrontal cortex, with a self-supervised cross-modal pretraining stage evaluated against supervised baselines.">
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6f5e'/%3E%3Ccircle cx='11' cy='11' r='4' fill='%23fdfdfb'/%3E%3Ccircle cx='21' cy='21' r='4' fill='%23b4de2c'/%3E%3Cpath d='M13.5 13.5 L18.5 18.5' stroke='%23fdfdfb' stroke-width='2'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand">Cortical layers from two modalities <span>· Visium DLPFC</span></div>
+    <nav class="navlinks">
+      <a href="#data">Data</a>
+      <a href="#explorer">Explorer</a>
+      <a href="#results">Results</a>
+      <a href="#ssl">Self-supervised</a>
+      <a href="#crossmodal">Cross-modal</a>
+      <a href="#methods">Methods</a>
+    </nav>
+    <button class="icon-btn" id="theme-toggle" title="Switch theme" aria-label="Switch theme">◐</button>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Spatial transcriptomics · multimodal representation learning</div>
+    <h1>Reading cortical layers from gene expression and tissue at the same time</h1>
+    <p class="lede">
+      Each spot on a Visium slide gives two measurements of the same few cells: a
+      transcriptome and a photograph. This project trains encoders on both, fuses
+      them to predict the cortical layer a spot belongs to, and tests whether a
+      self-supervised objective that uses only the pairing between the two
+      modalities can replace part of the labelled data. Everything is evaluated on
+      a donor whose tissue the models never see during training.
+    </p>
+    <div class="statgrid" id="hero-stats"></div>
+  </div>
+</header>
+
+<main>
+
+<!-- ============================ DATA ============================ -->
+<section id="data">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="num">01 — The data</span>
+      <h2>Twelve sections, three donors, two modalities per spot</h2>
+      <p>
+        The spatialLIBD experiment sampled dorsolateral prefrontal cortex from
+        three neurotypical donors, four sections each. Every spot carries a UMI
+        count vector over 33,538 genes and sits at a known pixel coordinate on the
+        H&amp;E image of the same section, which is what makes the pairing exact
+        rather than approximate. Two neuroanatomists annotated the six cortical
+        layers and the white matter by hand.
+      </p>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head"><h3>Sections and split</h3>
+          <span class="hint">hover a row for detail</span></div>
+        <div class="panel-body tablewrap"><table id="sections-table"></table></div>
+      </div>
+      <div>
+        <div class="panel">
+          <div class="panel-head"><h3>Annotated spots per layer</h3></div>
+          <div class="panel-body"><div id="layer-bars"></div></div>
+        </div>
+        <div class="spacer"></div>
+        <div class="callout">
+          <p><strong>Why the split is by donor.</strong> Sections from one donor
+          come from the same tissue block, and two adjacent sections are almost
+          the same cells cut twice. Splitting at random across spots or sections
+          gives a model neighbouring tissue in both train and test and inflates
+          every number. All results below are on Br8100, held out completely.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="panel">
+      <div class="panel-head"><h3>What one spot looks like</h3>
+        <span class="hint" id="spot-hint"></span></div>
+      <div class="panel-body"><div id="spot-schematic"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================== EXPLORER ========================== -->
+<section id="explorer">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="num">02 — Section explorer</span>
+      <h2>Every spot, every prediction</h2>
+      <p>
+        Pick a section and colour the spots by the manual annotation, the model's
+        call, its confidence, how much weight the fusion gate put on each
+        modality, or the measured level of a marker gene. Hovering a spot shows
+        the tissue underneath it and the full probability vector.
+      </p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head" style="gap:16px">
+        <div class="controls" style="flex:1">
+          <div class="field">
+            <label for="sel-section">Section</label>
+            <select id="sel-section"></select>
+          </div>
+          <div class="field">
+            <label for="sel-color">Colour by</label>
+            <select id="sel-color">
+              <option value="true">Manual annotation</option>
+              <option value="pred">Predicted layer</option>
+              <option value="error">Agreement</option>
+              <option value="confidence">Model confidence</option>
+              <option value="gate">Fusion gate weight</option>
+              <option value="umi">Total UMI</option>
+              <option value="gene">Marker gene</option>
+            </select>
+          </div>
+          <div class="field" id="gene-field" style="display:none">
+            <label for="sel-gene">Gene</label>
+            <select id="sel-gene"></select>
+          </div>
+          <div class="field">
+            <label for="rng-size">Spot size</label>
+            <input type="range" id="rng-size" min="1.6" max="6" step="0.2" value="3.2">
+          </div>
+          <div class="field">
+            <label>&nbsp;</label>
+            <div class="segmented" id="view-mode">
+              <button data-mode="single" class="on">Single</button>
+              <button data-mode="compare">Side by side</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>&nbsp;</label>
+            <label class="toggle"><input type="checkbox" id="chk-tissue" checked> Tissue backdrop</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="explorer">
+        <div class="canvas-stack">
+          <div id="single-view">
+            <canvas id="map-main"></canvas>
+          </div>
+          <div id="compare-view" class="canvas-pair hidden">
+            <div class="canvas-cell">
+              <canvas id="map-left"></canvas>
+              <div class="cap">manual annotation</div>
+            </div>
+            <div class="canvas-cell">
+              <canvas id="map-right"></canvas>
+              <div class="cap">model prediction</div>
+            </div>
+          </div>
+          <div class="spacer"></div>
+          <div id="map-legend" class="legend"></div>
+        </div>
+
+        <aside class="sidepanel">
+          <h4>Spot under cursor</h4>
+          <div class="patch-preview" id="patch-preview">hover the map</div>
+          <dl class="kv" id="spot-facts"></dl>
+          <h4 style="margin-top:14px">Predicted probability</h4>
+          <div class="probbars" id="spot-probs"></div>
+        </aside>
+      </div>
+    </div>
+    <div class="note" id="explorer-note"></div>
+  </div>
+</section>
+
+<!-- =========================== RESULTS =========================== -->
+<section id="results">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="num">03 — Results</span>
+      <h2>What each modality contributes</h2>
+      <p>
+        All rows are the same training recipe, the same held-out donor and the
+        same evaluation code; only the input and the initialisation change.
+        Sort by any column, and select a row to redraw the panels underneath it.
+      </p>
+      <p>
+        The short version is that fusion did not pay off. The best fused model
+        finishes a thousandth of a point ahead of expression alone, and the three
+        fusion schemes land within 0.023 of each other. Histology on its own is
+        far weaker, though not empty: look at its white matter score against its
+        layer 4 and layer 5 scores and it becomes clear the images carry one
+        thing well and the rest poorly.
+      </p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Held-out donor Br8100</h3>
+        <span class="hint">click a row to inspect · click a header to sort</span></div>
+      <div class="panel-body tablewrap"><table id="models-table"></table></div>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head"><h3>Confusion matrix</h3>
+          <span class="hint" id="cm-caption"></span></div>
+        <div class="panel-body" style="display:grid;place-items:center">
+          <div id="confusion"></div>
+        </div>
+      </div>
+      <div>
+        <div class="panel">
+          <div class="panel-head"><h3>F1 by layer</h3></div>
+          <div class="panel-body"><div id="perclass"></div></div>
+        </div>
+        <div class="spacer"></div>
+        <div class="panel">
+          <div class="panel-head"><h3>Training curves</h3>
+            <span class="hint">validation macro-F1</span></div>
+          <div class="panel-body"><div id="curves"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head"><h3>Learned joint embedding</h3>
+          <span class="hint">UMAP, held-out donor, coloured by manual layer</span></div>
+        <div class="panel-body"><div id="umap"></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Where the gate looks</h3>
+          <span class="hint">weight given to expression, by layer</span></div>
+        <div class="panel-body"><div id="gate-bars"></div>
+          <div class="note" id="gate-note"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================= SSL ============================= -->
+<section id="ssl">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="num">04 — Self-supervised pretraining</span>
+      <h2>Learning from the pairing instead of the labels</h2>
+      <p>
+        The pretraining stage never reads a layer annotation. It takes the
+        expression vector and the H&amp;E crop from the same spot as a positive
+        pair, every other spot in the batch as a negative, and trains both
+        encoders with a symmetric InfoNCE loss. Spots within two lattice steps of
+        each other are excluded from the negatives, because at 100 µm spacing a
+        spot's neighbours contain much the same tissue and treating them as
+        negatives works against the structure the objective is meant to find.
+      </p>
+      <p>
+        One thing this dataset cannot show is the usual argument for
+        self-supervision. The spatialLIBD annotators labelled nearly every spot,
+        so there is no meaningful pool of unlabelled tissue to exploit. What is
+        testable is whether the pairing alone teaches the encoders enough that
+        they need fewer labels afterwards, and whether the representation stands
+        up on its own with nothing fitted on top of it.
+      </p>
+    </div>
+
+    <div class="statgrid" id="ssl-stats"></div>
+    <div class="spacer"></div>
+
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head"><h3>Contrastive objective</h3>
+          <span class="hint">loss and in-batch matching rate</span></div>
+        <div class="panel-body"><div id="ssl-loss"></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>What the frozen embeddings know</h3>
+          <span class="hint">nearest-neighbour vote, nothing fitted</span></div>
+        <div class="panel-body"><div id="ssl-probe"></div>
+          <div class="note" id="probe-note"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="panel">
+      <div class="panel-head"><h3>Cross-modal retrieval</h3>
+        <span class="hint">held-out donor, expression query against an image gallery</span></div>
+      <div class="panel-body">
+        <div class="grid2">
+          <div id="ssl-retrieval"></div>
+          <div class="note" id="retrieval-note" style="margin:0"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="panel">
+      <div class="panel-head"><h3>Label efficiency</h3>
+        <span class="hint">same architecture, same schedule, only the initialisation differs</span></div>
+      <div class="panel-body">
+        <div class="grid2">
+          <div><div id="efficiency-curve"></div></div>
+          <div class="tablewrap"><table id="efficiency-table"></table></div>
+        </div>
+        <div class="note" id="efficiency-note"></div>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="panel">
+      <div class="panel-head"><h3>Pretraining ablations</h3>
+        <span class="hint">frozen encoders with a linear head, so the representation is what is measured</span></div>
+      <div class="panel-body"><div id="ssl-ablation"></div>
+        <div class="note" id="ablation-note"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= CROSS-MODAL ========================= -->
+<section id="crossmodal">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="num">05 — Cross-modal prediction</span>
+      <h2>How much of the transcriptome is visible in the tissue</h2>
+      <p>
+        Training a model to regress the expression panel from the H&amp;E crop
+        alone puts a number on the overlap between the two modalities. Genes that
+        follow the cortical bands should be partly recoverable, since laminar
+        position is written into the morphology; genes that vary for reasons with
+        no visible signature should not be.
+      </p>
+    </div>
+
+    <div class="statgrid" id="regression-stats"></div>
+    <div class="spacer"></div>
+
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head"><h3>Correlation across all modelled genes</h3>
+          <span class="hint">Pearson r, held-out donor</span></div>
+        <div class="panel-body"><div id="gene-hist"></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Best-recovered genes</h3>
+          <span class="hint">hover for the value</span></div>
+        <div class="panel-body" style="max-height:340px;overflow-y:auto">
+          <div id="top-genes"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="panel">
+      <div class="panel-head"><h3>Measured against predicted</h3>
+        <span class="hint">each point is one spot on the held-out donor</span></div>
+      <div class="panel-body"><div class="grid3" id="gene-scatters"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================== METHODS =========================== -->
+<section id="methods">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="num">06 — Methods</span>
+      <h2>How this was built</h2>
+    </div>
+    <div class="grid2">
+      <div class="prose">
+        <h3>Inputs</h3>
+        <p>
+          Counts are library-size normalised to the median training depth and
+          log-transformed. The 3,000 most variable genes are chosen on the
+          training sections only, excluding mitochondrial and ribosomal genes,
+          then standardised with training means and standard deviations. Image
+          crops are squares of twice the spot diameter taken from the
+          full-resolution slide and resized to 112 px, so each crop covers the
+          same physical area on every section regardless of small differences in
+          spot size.
+        </p>
+
+        <h3>Encoders</h3>
+        <p>
+          Expression goes through a two-layer MLP to a 256-dimensional embedding.
+          Images go through a ResNet-18 with the max pool removed from its stem,
+          which puts the first residual stage at 56×56 rather than 28×28 and
+          keeps nuclear-scale texture in range at a 112 px input. A stride-1
+          stem preserves more again but measured roughly ten times slower on the
+          GPU used here, and it discards the pretrained stem weights. The two
+          embeddings are combined by a gate that produces per-spot weights for
+          each modality, and the fused vector feeds a linear classifier over
+          seven classes.
+        </p>
+
+        <h3>Self-supervised stage</h3>
+        <p>
+          Symmetric InfoNCE over expression–image pairs with a learned
+          temperature, trained on every training-section spot and reading no
+          layer annotation. Augmentation is right-angle rotations, flips and a
+          stain jitter on the image side, gene dropout and multiplicative noise
+          on the expression side. Spots within two lattice steps on the same
+          section are masked out of the denominator. The pretrained encoders are
+          then either fine-tuned with the classifier or frozen and probed, and
+          both are compared against the same architecture trained from scratch.
+        </p>
+      </div>
+      <div class="prose">
+        <h3>Evaluation</h3>
+        <p>
+          Donor Br8100 is held out entirely. Validation for early stopping uses
+          two sections withheld from the training donors, which is optimistic by
+          construction and therefore never reported as a result. Layer frequencies
+          are uneven, so macro-F1 and balanced accuracy are the headline numbers
+          and plain accuracy is shown alongside for reference. Spatial coherence
+          counts how often a spot's prediction matches the majority call of its
+          six neighbours, which separates a model that produces contiguous bands
+          from one that is speckled at the same accuracy.
+        </p>
+
+        <h3>Reproducing</h3>
+        <pre><code>pip install -r requirements.txt
+python -m src.data.download
+python -m src.data.build_dataset
+python -m src.data.features
+python scripts/run_all.py
+python -m src.export_dashboard</code></pre>
+        <p id="runtime-note"></p>
+
+        <h3>Source</h3>
+        <p>
+          Data from Maynard et al., <em>Nature Neuroscience</em> 24, 425–436
+          (2021), distributed through spatialLIBD. Code and trained
+          configurations are in the repository this page is served from.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap" id="footer-text"></div>
+</footer>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

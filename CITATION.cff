@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+title: >-
+  Multimodal fusion of spatial transcriptomics and histology for
+  cortical layer prediction
+message: If you use this code, please cite it as below.
+type: software
+authors:
+  - given-names: Mahdi
+    family-names: Sabetkish
+repository-code: https://github.com/mahdisabetkish/histology-omics-fusion
+license: MIT
+keywords:
+  - spatial transcriptomics
+  - multimodal learning
+  - self-supervised learning
+  - computational pathology
+  - Visium
+references:
+  - type: article
+    title: >-
+      Transcriptome-scale spatial gene expression in the human dorsolateral
+      prefrontal cortex
+    authors:
+      - given-names: Kristen R.
+        family-names: Maynard
+      - given-names: Leonardo
+        family-names: Collado-Torres
+      - given-names: Lukas M.
+        family-names: Weber
+    journal: Nature Neuroscience
+    volume: 24
+    start: 425
+    end: 436
+    year: 2021
+    doi: 10.1038/s41593-020-00787-0
+    notes: Source of the spatialLIBD DLPFC data used throughout.
