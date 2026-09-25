@@ -6,7 +6,7 @@ message: If you use this code, please cite it as below.
 type: software
 authors:
   - given-names: Mahdi
-    family-names: Sabetkish
+    family-names: Sabet Kish
 repository-code: https://github.com/mahdisabetkish/histology-omics-fusion
 license: MIT
 keywords:
