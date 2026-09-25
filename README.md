@@ -20,7 +20,8 @@ a self-supervised stage that pretrains both encoders on the expression–image
 pairing without reading a single layer label, and measures whether that
 initialisation is worth anything downstream.
 
-**[Interactive results dashboard](https://mahdisabetkish.github.io/histology-omics-fusion/)**
+**[Interactive results dashboard](https://mahdisabetkish.github.io/histology-omics-fusion/)** |
+**[Docker image](https://hub.docker.com/r/mahdisabetkish/histology-omics-fusion)**
 
 ### What came out of it
 
@@ -328,6 +329,42 @@ The full matrix is 31 training runs and takes about 6.4 hours of GPU time on the
 hardware below, plus roughly two hours to download the raw data. Preprocessing
 the twelve slides takes about fifteen minutes and needs around 8 GB of free
 disk on top of the download.
+
+### Docker
+
+Two images are published to Docker Hub on every push to `main`: `cpu` (also
+`latest`) and `gpu`, built with CUDA 12.6. Both pin the exact versions in
+`requirements-lock.txt` and carry the ImageNet weights, so a container never
+needs the network after the data stage. Stages are subcommands, and `data/`,
+`runs/` and `docs/` are mounted from the checkout, so everything lands where
+the commands above would put it:
+
+```bash
+mkdir -p data runs                     # before the first run, so you own them
+docker compose run --rm hof info       # versions and device
+docker compose run --rm hof data       # download + check + preprocess
+docker compose run --rm hof train      # run_all.py; takes the same flags
+docker compose run --rm hof export     # score, rebuild docs/, print tables
+docker compose up dashboard            # docs/ at http://localhost:8080
+```
+
+On an NVIDIA machine with the Container Toolkit installed, use the `hof-gpu`
+service instead (`docker compose --profile gpu run --rm hof-gpu train`).
+Without Compose:
+
+```bash
+docker run --rm --shm-size=2g --gpus all \
+  -v "$PWD/data:/app/data" -v "$PWD/runs:/app/runs" -v "$PWD/docs:/app/docs" \
+  mahdisabetkish/histology-omics-fusion:gpu pipeline
+```
+
+`--shm-size` matters: DataLoader workers hand batches over through shared
+memory, and Docker's 64 MB default is too small for image batches. Any command
+the entrypoint does not recognise runs as given, so `python -m src.train ...`
+works unchanged. To build locally, `docker compose build`, or
+`docker build --build-arg TORCH_VARIANT=cu126 .` for the GPU image.
+`.github/workflows/docker.yml` builds both, smoke-tests them offline and pushes
+them with SBOM and provenance attestations.
 
 ### On a cluster
 

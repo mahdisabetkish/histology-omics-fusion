@@ -1,0 +1,21 @@
+# Keeps the Docker base image and the workflow's actions current. Python
+# packages are deliberately left out: requirements-lock.txt records the exact
+# versions the published results were produced with.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    ignore:
+      # Python 3.11 is what the results were produced on.
+      - dependency-name: python
+        update-types: [version-update:semver-minor, version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

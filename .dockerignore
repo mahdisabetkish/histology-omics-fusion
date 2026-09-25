@@ -1,0 +1,11 @@
+# Whitelist. The build only needs the code and the lock file; everything else,
+# above all data/ (~9 GB once built) and runs/ (checkpoints), stays out of the
+# build context.
+*
+!src/
+!scripts/
+!docker/entrypoint.sh
+!requirements-lock.txt
+
+**/__pycache__/
+**/*.py[cod]

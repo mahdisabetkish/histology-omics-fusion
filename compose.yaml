@@ -1,0 +1,55 @@
+# mkdir -p data runs                         # first, or Docker creates them as root
+# docker compose run --rm hof info            # what the container sees
+# docker compose run --rm hof data            # download and preprocess
+# docker compose run --rm hof train --workers 3
+# docker compose run --rm hof export
+# docker compose --profile gpu run --rm hof-gpu train
+# docker compose up dashboard                 # docs/ at http://localhost:8080
+#
+# data/, runs/ and docs/ are bind mounts, so results land in the repository
+# exactly where the non-Docker workflow puts them.
+
+name: histology-omics-fusion
+
+x-hof: &hof
+  image: ${HOF_IMAGE:-mahdisabetkish/histology-omics-fusion}:${HOF_TAG:-cpu}
+  build:
+    context: .
+    args:
+      TORCH_VARIANT: cpu
+  # DataLoader workers pass batches through /dev/shm, and Docker's 64 MB
+  # default is far too small for 112 px image batches.
+  shm_size: 2gb
+  volumes:
+    - ./data:/app/data
+    - ./runs:/app/runs
+    - ./docs:/app/docs
+
+services:
+  hof:
+    <<: *hof
+
+  hof-gpu:
+    <<: *hof
+    image: ${HOF_IMAGE:-mahdisabetkish/histology-omics-fusion}:gpu
+    build:
+      context: .
+      args:
+        TORCH_VARIANT: cu126
+    profiles: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # The static dashboard, served straight from docs/.
+  dashboard:
+    image: nginx:1.29-alpine
+    ports:
+      - "${DASHBOARD_PORT:-8080}:80"
+    volumes:
+      - ./docs:/usr/share/nginx/html:ro
+    profiles: [dashboard]
