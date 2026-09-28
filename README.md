@@ -299,6 +299,13 @@ src/
   train_expression.py  expression regressed from histology
   evaluate.py          held-out scoring and per-spot export
   export_dashboard.py  builds everything under docs/
+main.nf                the whole study as a Nextflow pipeline
+modules/local/         one Nextflow process per stage
+assets/
+  pretraining.csv      the self-supervised runs
+  experiments.csv      every supervised and regression run: the run matrix
+conf/                  resources per process, publishing, the test profile
+bin/                   helpers the pipeline puts on PATH, incl. synthetic data
 scripts/
   run_all.py           the full experiment matrix, sequentially
   check_data.py        what is downloaded, complete and readable
@@ -329,6 +336,72 @@ The full matrix is 31 training runs and takes about 6.4 hours of GPU time on the
 hardware below, plus roughly two hours to download the raw data. Preprocessing
 the twelve slides takes about fifteen minutes and needs around 8 GB of free
 disk on top of the download.
+
+### With Nextflow
+
+`main.nf` runs the same study as a Nextflow pipeline, from download to the
+rebuilt dashboard. It is the easiest way to reproduce the results on anything
+larger than one workstation, and it replaces the bookkeeping the other runners
+do by hand:
+
+- **Parallelism from the dependency graph.** Each run in the matrix starts as
+  soon as its inputs exist. The runs that fine-tune from `ssl` start when that
+  one pretraining run finishes, without waiting for its two ablations.
+- **Resume.** `-resume` reuses every task whose inputs and code are unchanged,
+  so an interrupted run, or a change to one model, repeats only what it has to.
+- **One definition, any executor.** The same pipeline runs on a laptop, a
+  workstation or Slurm, with Docker, Apptainer, Singularity, conda or a local
+  environment, chosen by profile.
+- **The run matrix is data.** `assets/pretraining.csv` and
+  `assets/experiments.csv` list every run with its arguments, the checkpoint it
+  starts from and whether it is scored on all three splits. Adding a model is a
+  new row. The files are validated before anything is scheduled, so a
+  mistyped checkpoint name fails at once instead of dropping a run silently.
+- **Provenance.** Every run writes an execution report, a timeline, a task
+  trace and the DAG to `<outdir>/pipeline_info/`.
+
+```bash
+# the whole study on one GPU machine
+nextflow run . -profile docker,gpu
+
+# on a cluster, one GPU per training task
+nextflow run . -profile slurm,apptainer,gpu --cluster_options '--account=abc123'
+
+# the raw files are already on disk, or preprocessing is already done
+nextflow run . -profile docker,gpu --raw data/raw
+nextflow run . -profile docker,gpu --processed results/processed
+
+# pick up where an interrupted run stopped
+nextflow run . -profile docker,gpu -resume
+```
+
+Outputs land in `--outdir` (default `results/`) in the same layout the rest of
+the repository uses: `processed/`, `runs/<tag>/` with `eval_<split>/` beside
+each checkpoint, `docs/` and `results_tables.md`.
+
+Parameters are listed with their defaults in `nextflow.config`; the ones you
+are most likely to change are `--epochs`, `--ssl_epochs`, `--seed`,
+`--eval_splits` and `--outdir`. `train_extra_args` and `ssl_extra_args` pass
+flags through to every training call, for example
+`--train_extra_args '--batch-size 64'`.
+
+Under Docker and Apptainer the image supplies only the environment. The
+checkout is mounted into the container and tasks run its code, so local edits
+take effect without rebuilding the image, and a commit hash identifies exactly
+what ran. The `docker` profile also sets `--shm-size=2g`, for the reason given
+in the next section.
+
+`-profile test` runs every stage and every row of the matrix on a small
+synthetic dataset, two epochs each, in a few minutes on a CPU:
+
+```bash
+nextflow run . -profile test,docker
+```
+
+It checks that the stages fit together, not the science. CI runs it on every
+push (`.github/workflows/nextflow.yml`), after a lint and a stub run that
+exercises the channel logic without executing anything. Requires Nextflow
+24.10 or later and Java 17 or later.
 
 ### Docker
 
@@ -369,8 +442,10 @@ them with SBOM and provenance attestations.
 ### On a cluster
 
 The experiment matrix is embarrassingly parallel: once pretraining is finished,
-the runs share nothing and each writes to its own `runs/<tag>/`. `slurm/`
-submits the whole thing as three dependent array jobs.
+the runs share nothing and each writes to its own `runs/<tag>/`. The Nextflow
+`slurm` profile above is the simplest way to use that. `slurm/` also has plain
+batch scripts that submit the whole thing as three dependent array jobs, for
+sites without Nextflow.
 
 ```bash
 bash slurm/submit_all.sh              # data, pretrain, train matrix, export
