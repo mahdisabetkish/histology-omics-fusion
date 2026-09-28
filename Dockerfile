@@ -20,8 +20,9 @@ ARG PYTHON_VERSION=3.11
 FROM python:${PYTHON_VERSION}-slim-bookworm AS base
 
 # tini reaps DataLoader worker processes and forwards Ctrl+C to Python.
+# procps provides ps, which Nextflow needs to record per-task CPU and memory.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends tini \
+ && apt-get install -y --no-install-recommends tini procps \
  && rm -rf /var/lib/apt/lists/*
 
 # UID 1000 matches the first user on most Linux hosts, so files written to
