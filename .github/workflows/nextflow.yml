@@ -1,0 +1,118 @@
+# Lints the pipeline, checks the wiring with a stub run, then runs it end to
+# end on synthetic data inside the published CPU image.
+#
+# The test run builds the CPU image from this commit (reusing the docker
+# workflow's layer cache) and mounts the checkout into it, so both the code and
+# the environment under test are the ones in the commit.
+
+name: nextflow
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - "CITATION.cff"
+      - "LICENSE"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: nextflow-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NXF_ANSI_LOG: false
+  NXF_VER: 25.10.0
+
+jobs:
+  lint-and-stub:
+    name: lint + stub
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: nf-core/setup-nextflow@v2
+        with:
+          version: ${{ env.NXF_VER }}
+
+      - name: Lint
+        run: nextflow lint .
+
+      # Every process runs its stub block: seconds, no container, no data. Fails
+      # on a broken channel join, a missing output or a bad run-matrix row.
+      - name: Stub run
+        run: nextflow run . -profile test -stub --outdir stub-results
+
+      - name: Check output layout
+        run: |
+          test -f stub-results/results_tables.md
+          test -f stub-results/docs/data/manifest.json
+          test "$(ls stub-results/runs | wc -l)" -eq 31
+          for split in test val train; do
+            test -d "stub-results/runs/fusion_gated_ssl/eval_$split"
+          done
+
+  test:
+    name: test profile
+    needs: lint-and-stub
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: nf-core/setup-nextflow@v2
+        with:
+          version: ${{ env.NXF_VER }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      # Tagged with the name the docker profile asks for, so Nextflow uses this
+      # build instead of pulling the published image.
+      - name: Build CPU image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          build-args: TORCH_VARIANT=cpu
+          load: true
+          tags: docker.io/mahdisabetkish/histology-omics-fusion:cpu
+          cache-from: type=gha,scope=cpu
+
+      - name: Run on synthetic data
+        run: nextflow run . -profile test,docker --outdir results-test
+
+      - name: Check results
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          out = pathlib.Path("results-test")
+          manifest = json.loads((out / "docs/data/manifest.json").read_text())
+          assert len(manifest["models"]) == 12, len(manifest["models"])
+          assert len(manifest["efficiency"]) == 14, len(manifest["efficiency"])
+          assert set(manifest["ssl"]) == {"ssl", "ssl_no_imagenet", "ssl_no_neighbour_mask"}
+          print((out / "results_tables.md").read_text())
+          PY
+
+      - name: Upload execution reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: pipeline-info
+          path: results-test/pipeline_info/
+          if-no-files-found: ignore
