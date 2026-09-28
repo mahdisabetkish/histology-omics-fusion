@@ -1,0 +1,4 @@
+tag,args
+ssl,
+ssl_no_imagenet,--no-imagenet
+ssl_no_neighbour_mask,--neighbour-radius 0

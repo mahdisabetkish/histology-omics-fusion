@@ -41,3 +41,10 @@ env/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Nextflow work directory, run logs and default output directories.
+/work/
+/.nextflow/
+.nextflow.log*
+/results/
+/results-test/

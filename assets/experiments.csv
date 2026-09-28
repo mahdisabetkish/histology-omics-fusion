@@ -1,0 +1,29 @@
+tag,entry,init,evaluate,args
+expression_only,train,,true,--modality expression
+image_only,train,,true,--modality image
+image_only_scratch,train,,true,--modality image --no-imagenet
+fusion_concat,train,,true,--modality both --fusion concat
+fusion_gated,train,,true,--modality both --fusion gated
+fusion_bilinear,train,,true,--modality both --fusion bilinear
+fusion_gated_ssl,train,ssl,true,--modality both --fusion gated
+expression_only_ssl,train,ssl,true,--modality expression
+image_only_ssl,train,ssl,true,--modality image
+probe_ssl,train,ssl,true,--modality both --fusion gated --freeze-encoders --epochs 30 --lr 1e-3
+probe_ssl_no_imagenet,train,ssl_no_imagenet,true,--modality both --fusion gated --freeze-encoders --epochs 30 --lr 1e-3 --no-imagenet
+probe_ssl_no_neighbour_mask,train,ssl_no_neighbour_mask,true,--modality both --fusion gated --freeze-encoders --epochs 30 --lr 1e-3
+eff_scratch_001,train,,false,--modality both --fusion gated --label-fraction 0.01
+eff_scratch_002,train,,false,--modality both --fusion gated --label-fraction 0.02
+eff_scratch_005,train,,false,--modality both --fusion gated --label-fraction 0.05
+eff_scratch_010,train,,false,--modality both --fusion gated --label-fraction 0.10
+eff_scratch_025,train,,false,--modality both --fusion gated --label-fraction 0.25
+eff_scratch_050,train,,false,--modality both --fusion gated --label-fraction 0.50
+eff_scratch_100,train,,false,--modality both --fusion gated --label-fraction 1.00
+eff_ssl_001,train,ssl,false,--modality both --fusion gated --label-fraction 0.01
+eff_ssl_002,train,ssl,false,--modality both --fusion gated --label-fraction 0.02
+eff_ssl_005,train,ssl,false,--modality both --fusion gated --label-fraction 0.05
+eff_ssl_010,train,ssl,false,--modality both --fusion gated --label-fraction 0.10
+eff_ssl_025,train,ssl,false,--modality both --fusion gated --label-fraction 0.25
+eff_ssl_050,train,ssl,false,--modality both --fusion gated --label-fraction 0.50
+eff_ssl_100,train,ssl,false,--modality both --fusion gated --label-fraction 1.00
+expr_from_image,train_expression,,false,
+expr_from_image_ssl,train_expression,ssl,false,
